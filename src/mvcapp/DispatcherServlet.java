@@ -1,7 +1,10 @@
 package mvcapp;
 
 import mvcapp.controller.BoardController;
+import mvcapp.controller.UserController;
 import mvcapp.model.BoardRepository;
+import mvcapp.model.User;
+import mvcapp.model.UserRepository;
 
 
 import javax.servlet.ServletException;
@@ -9,6 +12,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 import java.io.IOException;
 
 
@@ -33,19 +37,70 @@ public class DispatcherServlet extends HttpServlet {
         String action = getAction(req);
         System.out.println("action: " + action);
 
+        String method = req.getMethod();
+        System.out.println(method);
         //4. 컨트롤러 객체 생성
         BoardController boardCon = new BoardController(new BoardRepository()); //DI 의존성 주입
+        UserController userCon = new UserController(new UserRepository());
+        HttpSession session = req.getSession();
 
+        //5. 라우팅하기 User
+        if(path.equals("user")){
+            switch (action){
+                case "joinForm":
+                    String joinFormView = userCon.joinForm();
+                    req.getRequestDispatcher(joinFormView).forward(req, resp);
+                    break;
+                case "loginForm":
+                    String loginFormView = userCon.loginForm();
+                    req.getRequestDispatcher(loginFormView).forward(req, resp);
+                    break;
+                case "join":
+                    if(!method.equals("POST")){
+                        resp.sendRedirect("/user/error.do");
+                        break;
+                    }
+                    String username = req.getParameter("username");
+                    String password = req.getParameter("password");
+                    String email = req.getParameter("email");
+                    String joinRedirect = userCon.join(username, password, email);
 
-        //5. 라우팅하기
-        if(path.equals("board")){
+                    resp.sendRedirect(joinRedirect);
+                    break;
+                case "login":
+                    System.out.println(method);
+                    if(!method.equals("POST")){
+                        resp.sendRedirect("/user/error.do");
+                        break;
+                    }
+                    username = req.getParameter("username");
+                    password = req.getParameter("password");
+                    String loginRedirect = userCon.login(username, password);
+                    User user = userCon.getUser(username, password);
+                    if(user != null){
+                        session.setAttribute("user", user);
+                    }
+                    resp.sendRedirect(loginRedirect);
+                    break;
+                case "error":
+                    String errRedirect = userCon.getError();
+                    req.getRequestDispatcher(errRedirect).forward(req, resp);
+                    break;
+                default:
+                    System.out.println("default");
+                    resp.sendRedirect("/user/loginForm.do");
+
+            }
+        }
+
+        //5. 라우팅하기 Board
+        else if(path.equals("board")){
             switch (action){
                 case "saveForm":
                     String saveFormView = boardCon.saveForm();
                     req.getRequestDispatcher(saveFormView).forward(req, resp);//두번 안만들라고
                     break;
                 case "save":
-                    String method = req.getMethod();
                     if(!method.equals("POST")){
                         resp.setContentType("text/html; charset=utf-8");
                         resp.getWriter().println("POST로 요청해야 합니다");
@@ -57,11 +112,14 @@ public class DispatcherServlet extends HttpServlet {
                     resp.sendRedirect(saveRedirect);
                     break;
                 case "list":
-                    String listView = boardCon.list(req);
-                    req.getRequestDispatcher(listView).forward(req, resp);
-                    break;
-                default :
-                    resp.sendRedirect("/board/list.do");
+                    if(session.getAttribute("user") != null){ //user 값이 있으면 board보여줌
+                        String listView = boardCon.list(req);
+                        req.getRequestDispatcher(listView).forward(req, resp);
+                        break;
+                    }else {//없으면 로그인으로 돌아감
+                        resp.sendRedirect("/user/loginForm.do");
+                        break;
+                    }
             }
         }
     }
